@@ -17,7 +17,7 @@ import {ExtensionPreferences, gettext as _} from
 
 const SCHEMA_ID = 'org.gnome.shell.extensions.movie-screensaver';
 const DONATION_URL = 'https://buymeacoffee.com/Gilsonf';
-const GITLAB_URL = 'https://gitlab.com/gilson.fonsaca/movie_screensaver';
+const GITLAB_URL = 'https://github.com/gilson-fonsaca/movie_screensaver.git';
 
 export default class MovieScreensaverPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {

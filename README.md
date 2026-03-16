@@ -292,7 +292,7 @@ kill $(cat /run/user/$(id -u)/movie-screensaver.pid)
 ## Source Code
 
 The project is hosted on GitLab:
-[https://gitlab.com/gilson.fonsaca/movie_screensaver](https://gitlab.com/gilson.fonsaca/movie_screensaver)
+[https://github.com/gilson-fonsaca/movie_screensaver.git](https://github.com/gilson-fonsaca/movie_screensaver.git)
 
 Bug reports, merge requests and feature suggestions are welcome.
 
