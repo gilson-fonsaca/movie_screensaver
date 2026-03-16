@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.movie-screensaver"
+          path="/org/gnome/shell/extensions/movie-screensaver/">
+
+    <key name="enabled" type="b">
+      <default>true</default>
+      <summary>Enable the screensaver</summary>
+      <description>
+        When true the extension will activate the video screensaver after
+        the configured idle timeout.
+      </description>
+    </key>
+
+    <key name="idle-timeout-minutes" type="i">
+      <default>5</default>
+      <range min="0" max="30"/>
+      <summary>Idle timeout in minutes</summary>
+      <description>
+        Number of minutes of user inactivity before the screensaver is
+        activated. A value of 0 disables the automatic timeout.
+      </description>
+    </key>
+
+    <key name="video-path" type="s">
+      <default>''</default>
+      <summary>Path to the video file</summary>
+      <description>
+        Absolute path to the local .mp4 file that will be played as the
+        screensaver.
+      </description>
+    </key>
+
+    <key name="lock-screen-after" type="b">
+      <default>false</default>
+      <summary>Lock the screen after the screensaver exits</summary>
+      <description>
+        When true the GNOME screen shield will be activated as soon as
+        user input dismisses the screensaver.
+      </description>
+    </key>
+
+    <key name="continue-video-after-extension-reload" type="b">
+      <default>false</default>
+      <summary>Keep the player running across extension reloads</summary>
+      <description>
+        When true the video player process is not killed when the extension
+        is disabled or reloaded. When false any running player is stopped
+        immediately on disable/reload.
+      </description>
+    </key>
+
+    <key name="mute-video" type="b">
+      <default>false</default>
+      <summary>Mute video audio during screensaver</summary>
+      <description>
+        When true the video will play without audio. When false the video
+        audio plays at the system volume level.
+      </description>
+    </key>
+
+  </schema>
+</schemalist>
