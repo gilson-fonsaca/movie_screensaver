@@ -112,18 +112,6 @@ export default class MovieScreensaverPreferences extends ExtensionPreferences {
         settings.bind('lock-screen-after', lockRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         generalGroup.add(lockRow);
 
-        const continueRow = new Adw.SwitchRow({
-            title: _('Restart video after extension reload'),
-            subtitle: _('Restart the video if the extension is reloaded'),
-        });
-        settings.bind(
-            'continue-video-after-extension-reload',
-            continueRow,
-            'active',
-            Gio.SettingsBindFlags.DEFAULT
-        );
-        generalGroup.add(continueRow);
-
         // ── Group: Timing ────────────────────────────────────────────────────
         const timingGroup = new Adw.PreferencesGroup({
             title: _('Timing'),
@@ -147,42 +135,54 @@ export default class MovieScreensaverPreferences extends ExtensionPreferences {
         // ── Group: Video ─────────────────────────────────────────────────────
         const videoGroup = new Adw.PreferencesGroup({
             title: _('Video'),
-            description: _('Select the local video file to play as screensaver.'),
+            description: _(
+                'Select the folder containing the video files to play as ' +
+                'screensaver. All .mp4, .mkv, .webm and .avi files found ' +
+                'in the folder will be played in sequence.'
+            ),
         });
         settingsPage.add(videoGroup);
 
         // Mute audio
         const muteRow = new Adw.SwitchRow({
             title: _('Mute audio'),
-            subtitle: _('Play the video without sound'),
+            subtitle: _('Play the videos without sound'),
         });
         settings.bind('mute-video', muteRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         videoGroup.add(muteRow);
 
+        // Shuffle videos
+        const shuffleRow = new Adw.SwitchRow({
+            title: _('Shuffle videos'),
+            subtitle: _('Play the videos in random order instead of alphabetical order'),
+        });
+        settings.bind('shuffle-videos', shuffleRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        videoGroup.add(shuffleRow);
+
         const pathRow = new Adw.EntryRow({
-            title: _('Video file path'),
-            text: settings.get_string('video-path'),
+            title: _('Videos folder path'),
+            text: settings.get_string('videos-folder'),
             show_apply_button: true,
         });
         pathRow.connect('apply', row => {
-            settings.set_string('video-path', row.get_text().trim());
+            settings.set_string('videos-folder', row.get_text().trim());
         });
-        settings.connect('changed::video-path', s => {
-            if (pathRow.get_text() !== s.get_string('video-path'))
-                pathRow.set_text(s.get_string('video-path'));
+        settings.connect('changed::videos-folder', s => {
+            if (pathRow.get_text() !== s.get_string('videos-folder'))
+                pathRow.set_text(s.get_string('videos-folder'));
         });
         videoGroup.add(pathRow);
 
-        const fileRow = new Adw.ActionRow({
-            title: _('Browse for video file'),
-            subtitle: _('Select an .mp4, .mkv or .webm file'),
+        const folderRow = new Adw.ActionRow({
+            title: _('Browse for videos folder'),
+            subtitle: _('Select a folder containing video files'),
             activatable: true,
         });
-        fileRow.add_suffix(new Gtk.Image({icon_name: 'document-open-symbolic'}));
-        fileRow.connect('activated', () => {
-            this._openFileChooser(window, settings, pathRow);
+        folderRow.add_suffix(new Gtk.Image({icon_name: 'folder-open-symbolic'}));
+        folderRow.connect('activated', () => {
+            this._openFolderChooser(window, settings, pathRow);
         });
-        videoGroup.add(fileRow);
+        videoGroup.add(folderRow);
 
         // ── Page 2: Donate ────────────────────────────────────────────────────
         const donatePage = new Adw.PreferencesPage({
@@ -331,37 +331,24 @@ export default class MovieScreensaverPreferences extends ExtensionPreferences {
         aboutGroup.add(authorRow);
     }
 
-    // ── File chooser ──────────────────────────────────────────────────────────
+    // ── Folder chooser ────────────────────────────────────────────────────────
 
-    _openFileChooser(parentWindow, settings, pathRow) {
+    _openFolderChooser(parentWindow, settings, pathRow) {
         const dialog = new Gtk.FileDialog({
-            title: _('Select Video File'),
+            title: _('Select Videos Folder'),
             modal: true,
         });
 
-        const current = settings.get_string('video-path');
-        if (current && GLib.file_test(current, GLib.FileTest.EXISTS))
-            dialog.set_initial_file(Gio.File.new_for_path(current));
+        const current = settings.get_string('videos-folder');
+        if (current && GLib.file_test(current, GLib.FileTest.IS_DIR))
+            dialog.set_initial_folder(Gio.File.new_for_path(current));
 
-        const filter = new Gtk.FileFilter();
-        filter.set_name(_('Video files'));
-        filter.add_mime_type('video/mp4');
-        filter.add_mime_type('video/x-matroska');
-        filter.add_mime_type('video/webm');
-        filter.add_pattern('*.mp4');
-        filter.add_pattern('*.mkv');
-        filter.add_pattern('*.webm');
-        filter.add_pattern('*.avi');
-        const store = new Gio.ListStore({item_type: Gtk.FileFilter});
-        store.append(filter);
-        dialog.set_filters(store);
-
-        dialog.open(parentWindow, null, (_d, result) => {
+        dialog.select_folder(parentWindow, null, (_d, result) => {
             try {
-                const file = dialog.open_finish(result);
-                if (file) {
-                    const path = file.get_path();
-                    settings.set_string('video-path', path);
+                const folder = dialog.select_folder_finish(result);
+                if (folder) {
+                    const path = folder.get_path();
+                    settings.set_string('videos-folder', path);
                     pathRow.set_text(path);
                 }
             } catch (_e) {

@@ -22,12 +22,22 @@
       </description>
     </key>
 
-    <key name="video-path" type="s">
+    <key name="videos-folder" type="s">
       <default>''</default>
-      <summary>Path to the video file</summary>
+      <summary>Path to the videos folder</summary>
       <description>
-        Absolute path to the local .mp4 file that will be played as the
-        screensaver.
+        Absolute path to a local directory containing video files (.mp4,
+        .mkv, .webm, .avi) to be played as the screensaver. All video files
+        found in the directory will be played in sequence.
+      </description>
+    </key>
+
+    <key name="shuffle-videos" type="b">
+      <default>false</default>
+      <summary>Shuffle video playback order</summary>
+      <description>
+        When true the videos in the folder will be played in random order.
+        When false they are played in alphabetical order.
       </description>
     </key>
 
@@ -37,16 +47,6 @@
       <description>
         When true the GNOME screen shield will be activated as soon as
         user input dismisses the screensaver.
-      </description>
-    </key>
-
-    <key name="continue-video-after-extension-reload" type="b">
-      <default>false</default>
-      <summary>Keep the player running across extension reloads</summary>
-      <description>
-        When true the video player process is not killed when the extension
-        is disabled or reloaded. When false any running player is stopped
-        immediately on disable/reload.
       </description>
     </key>
 
