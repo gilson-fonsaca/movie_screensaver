@@ -1,17 +1,23 @@
 # Movie Screensaver
 
-A GNOME Shell extension that plays a local `.mp4` video file as a fullscreen
-screensaver across all monitors after a configurable period of user inactivity.
+### Works on Wayland!
+
+A GNOME Shell extension that plays video files from a local folder as a
+fullscreen screensaver across all monitors after a configurable period of
+user inactivity.
 
 ---
 
 ## Description
 
 Movie Screensaver hooks into GNOME's idle monitor and, when the system has been
-idle for the configured number of minutes, covers every monitor with a
-fullscreen overlay and launches **mpv** to play the chosen video in a looping
-fullscreen window. The first mouse movement, mouse click, or key press
-dismisses the screensaver and optionally locks the screen.
+idle for the configured number of minutes, launches **mpv** to play all videos
+found in the configured folder as a sequential playlist in fullscreen across
+every monitor. The first mouse movement, mouse click, or key press dismisses
+the screensaver and optionally locks the screen.
+
+Videos are played in alphabetical order by default. An optional **shuffle**
+mode randomises the playback order on each activation.
 
 A top-bar indicator gives quick access to all settings and an instant
 "Start Screensaver Now" action.
@@ -67,7 +73,7 @@ The script will:
 2. Copy all extension files to the correct location.
 3. Compile the GSettings schema automatically.
 4. Attempt to enable the extension via `gnome-extensions enable`.
-5. Print the `gsettings` commands needed to configure the video path and timeout.
+5. Print the `gsettings` commands needed to configure the videos folder and timeout.
 
 ### Manual
 
@@ -152,10 +158,17 @@ All settings are stored in GSettings under
 |---|---|---|---|
 | `enabled` | boolean | `true` | Enable/disable the screensaver |
 | `idle-timeout-minutes` | integer (0–30) | `5` | Minutes of inactivity before activation |
-| `video-path` | string | `''` | Absolute path to the `.mp4` file |
+| `videos-folder` | string | `''` | Absolute path to the folder containing video files |
+| `shuffle-videos` | boolean | `false` | Play videos in random order instead of alphabetical |
 | `lock-screen-after` | boolean | `false` | Lock the screen when dismissed |
 | `mute-video` | boolean | `false` | Play video without audio |
-| `continue-video-after-extension-reload` | boolean | `false` | Keep the player alive across reloads |
+
+### Supported video formats
+
+Any format supported by mpv is accepted. The extension looks for files with
+the following extensions inside the configured folder:
+
+`.mp4` · `.mkv` · `.webm` · `.avi` · `.mov` · `.m4v`
 
 ### Set values from the terminal
 
@@ -163,8 +176,9 @@ All settings are stored in GSettings under
 BASE="org.gnome.shell.extensions.movie-screensaver"
 SCHEMA_DIR="$HOME/.local/share/gnome-shell/extensions/movie-screensaver@gilsonf/schemas"
 
-gsettings --schemadir "$SCHEMA_DIR" set $BASE video-path '/home/user/videos/my-video.mp4'
+gsettings --schemadir "$SCHEMA_DIR" set $BASE videos-folder '/home/user/Videos/screensaver'
 gsettings --schemadir "$SCHEMA_DIR" set $BASE idle-timeout-minutes 10
+gsettings --schemadir "$SCHEMA_DIR" set $BASE shuffle-videos true
 gsettings --schemadir "$SCHEMA_DIR" set $BASE lock-screen-after true
 ```
 
@@ -176,10 +190,10 @@ Clicking the **video-display** icon in the top bar opens a menu with:
 
 - **Screensaver enabled** – toggle on/off
 - **Lock screen after exit** – toggle
-- **Continue video after reload** – toggle
 - **Mute video** – toggle audio on/off
+- **Shuffle videos** – toggle random playback order
 - **Idle timeout slider** – 0–30 minutes
-- **Video file path entry** – type the full path and press Enter
+- **Videos folder** – type the full folder path and press Enter
 - **Start Screensaver Now** – immediately activate (useful for testing)
 
 ---
@@ -198,9 +212,13 @@ The window has two tabs:
 
 - **Dependency banner** – shows a green notice if mpv is installed, or an
   orange warning with installation commands for common distros if it is not.
-- General toggles (enable, lock screen, continue after reload).
+- General toggles (enable, lock screen after exit).
 - Idle timeout spinner.
-- Video file path entry with a file chooser button.
+- **Video group:**
+  - Mute audio toggle.
+  - Shuffle videos toggle.
+  - Videos folder path entry with an apply button.
+  - Browse button to select the folder using a file manager dialog.
 
 ### Support tab
 
@@ -212,21 +230,14 @@ The window has two tabs:
 
 ```
 IdleMonitor detects idle threshold
-  └─► fullscreen ScreensaverActor created on every monitor
-        └─► mpv launched (--fs --loop=inf --hwdec=auto)
-              └─► Clutter stage listens for input events
-                    └─► mouse/keyboard detected
+  └─► _listVideoFiles() scans the configured folder
+        └─► mpv launched per monitor (--fs --loop-playlist=inf --hwdec=auto)
+              │   optional: --shuffle
+              └─► Idle monitor listens for user activity
+                    └─► mouse/keyboard/touch detected
                           ├─► mpv killed
-                          ├─► actors removed
                           └─► screen locked (if enabled)
 ```
-
-### Reload / disable behaviour
-
-| `continue-video-after-extension-reload` | Behaviour on disable/reload |
-|---|---|
-| `false` (default) | mpv is killed immediately |
-| `true` | mpv keeps running; extension reconnects on next enable |
 
 ---
 
@@ -256,14 +267,20 @@ journalctl /usr/bin/gnome-shell -f
 ### The screensaver never starts
 
 - Confirm `enabled` is `true` and `idle-timeout-minutes` is > 0.
-- Confirm `video-path` points to an existing readable file.
+- Confirm `videos-folder` points to an existing directory containing video files.
 - Check GNOME Shell logs: `journalctl /usr/bin/gnome-shell -f`
+
+### "No video files found in folder" error on screen
+
+- Confirm the folder contains files with supported extensions
+  (`.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`, `.m4v`).
+- Confirm the folder path is correct and the files are readable.
 
 ### "Failed to launch mpv" error on screen
 
 - Verify mpv is installed: `which mpv`
 - The preferences window shows an installation guide if mpv is missing.
-- Test manually: `mpv --fs --loop=inf /path/to/video.mp4`
+- Test manually: `mpv --fs --loop-playlist=inf /path/to/video.mp4`
 
 ### Video plays but no audio / bad performance
 
@@ -276,12 +293,7 @@ journalctl /usr/bin/gnome-shell -f
 - On Wayland the screen shield requires the session to be unlocked first —
   this is a GNOME limitation.
 
-### Orphaned mpv after a crash
-
-If `continue-video-after-extension-reload` was `true` and the extension
-crashed, a PID file is left at `$XDG_RUNTIME_DIR/movie-screensaver.pid`.
-Kill the process manually, or run `./uninstall.sh` which handles this
-automatically:
+### Killing an orphaned mpv process manually
 
 ```bash
 kill $(cat /run/user/$(id -u)/movie-screensaver.pid)
@@ -291,10 +303,10 @@ kill $(cat /run/user/$(id -u)/movie-screensaver.pid)
 
 ## Source Code
 
-The project is hosted on GitLab:
+The project is hosted on GitHub:
 [https://github.com/gilson-fonsaca/movie_screensaver.git](https://github.com/gilson-fonsaca/movie_screensaver.git)
 
-Bug reports, merge requests and feature suggestions are welcome.
+Bug reports, pull requests and feature suggestions are welcome.
 
 ---
 

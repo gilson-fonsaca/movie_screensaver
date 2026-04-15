@@ -1,7 +1,7 @@
 /**
  * Movie Screensaver - GNOME Shell Extension
  *
- * Plays a local .mp4 video file as a fullscreen screensaver across all
+ * Plays local video files from a folder as a fullscreen screensaver across all
  * monitors after a configurable period of user inactivity.
  *
  * Requires GNOME Shell 47+
@@ -70,16 +70,6 @@ class MovieScreensaverIndicator extends PanelMenu.Button {
         });
         this.menu.addMenuItem(this._lockItem);
 
-        // ── Continue video after reload ──
-        this._continueItem = new PopupMenu.PopupSwitchMenuItem(
-            _('Restart video after reload'),
-            settings.get_boolean('continue-video-after-extension-reload')
-        );
-        this._continueItem.connect('toggled', (_item, state) => {
-            settings.set_boolean('continue-video-after-extension-reload', state);
-        });
-        this.menu.addMenuItem(this._continueItem);
-
         // ── Mute video ──
         this._muteItem = new PopupMenu.PopupSwitchMenuItem(
             _('Mute video'),
@@ -89,6 +79,16 @@ class MovieScreensaverIndicator extends PanelMenu.Button {
             settings.set_boolean('mute-video', state);
         });
         this.menu.addMenuItem(this._muteItem);
+
+        // ── Shuffle videos ──
+        this._shuffleItem = new PopupMenu.PopupSwitchMenuItem(
+            _('Shuffle videos'),
+            settings.get_boolean('shuffle-videos')
+        );
+        this._shuffleItem.connect('toggled', (_item, state) => {
+            settings.set_boolean('shuffle-videos', state);
+        });
+        this.menu.addMenuItem(this._shuffleItem);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
@@ -112,16 +112,22 @@ class MovieScreensaverIndicator extends PanelMenu.Button {
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        // ── Video path entry ──
+        // ── Videos folder label + entry ──
+        const folderLabelItem = new PopupMenu.PopupMenuItem(
+            _('Videos folder:'),
+            {reactive: false}
+        );
+        this.menu.addMenuItem(folderLabelItem);
+
         const pathItem = new PopupMenu.PopupBaseMenuItem({reactive: false});
         this._pathEntry = new St.Entry({
-            text: settings.get_string('video-path'),
-            hint_text: _('/path/to/video.mp4'),
+            text: settings.get_string('videos-folder'),
+            hint_text: _('/path/to/videos/'),
             x_expand: true,
             style_class: 'movie-screensaver-path-entry',
         });
         this._pathEntry.clutter_text.connect('activate', entry => {
-            settings.set_string('video-path', entry.get_text());
+            settings.set_string('videos-folder', entry.get_text());
         });
         pathItem.add_child(this._pathEntry);
         this.menu.addMenuItem(pathItem);
@@ -142,12 +148,12 @@ class MovieScreensaverIndicator extends PanelMenu.Button {
                 this._enableItem.setToggleState(s.get_boolean('enabled'));
             else if (key === 'lock-screen-after')
                 this._lockItem.setToggleState(s.get_boolean('lock-screen-after'));
-            else if (key === 'continue-video-after-extension-reload')
-                this._continueItem.setToggleState(s.get_boolean('continue-video-after-extension-reload'));
             else if (key === 'mute-video')
                 this._muteItem.setToggleState(s.get_boolean('mute-video'));
-            else if (key === 'video-path')
-                this._pathEntry.text = s.get_string('video-path');
+            else if (key === 'shuffle-videos')
+                this._shuffleItem.setToggleState(s.get_boolean('shuffle-videos'));
+            else if (key === 'videos-folder')
+                this._pathEntry.text = s.get_string('videos-folder');
             else if (key === 'idle-timeout-minutes') {
                 const m = s.get_int('idle-timeout-minutes');
                 timeoutLabel.label.text = _('Idle timeout: %d min').format(m);
@@ -212,7 +218,7 @@ class ScreensaverActor extends St.Widget {
         box.add_child(msg);
 
         const pathLabel = new St.Label({
-            text: _('File: %s').format(videoPath),
+            text: _('Path: %s').format(videoPath),
             style_class: 'movie-screensaver-error-path',
         });
         box.add_child(pathLabel);
@@ -258,8 +264,7 @@ export default class MovieScreensaverExtension extends Extension {
                 this._applyIdleMonitor();
         });
 
-        if (!this._settings.get_boolean('continue-video-after-extension-reload'))
-            this._killOrphanedPlayer();
+        this._killOrphanedPlayer();
     }
 
     disable() {
@@ -297,10 +302,8 @@ export default class MovieScreensaverExtension extends Extension {
 
         // ── Screensaver / player ─────────────────────────────────────────────
         try {
-            const continueVideo =
-                this._settings?.get_boolean('continue-video-after-extension-reload') ?? false;
             if (this._screensaverActive)
-                this._stopScreensaver(false, !continueVideo);
+                this._stopScreensaver(false, true);
         } catch (e) {
             console.warn('[MovieScreensaver] disable: screensaver stop error:', e.message);
         }
@@ -438,23 +441,65 @@ export default class MovieScreensaverExtension extends Extension {
     // ── Player management ────────────────────────────────────────────────────
 
     _startPlayer() {
-        const videoPath = this._settings.get_string('video-path');
+        const folderPath = this._settings.get_string('videos-folder');
 
-        if (!videoPath || videoPath.trim() === '') {
-            this._showError(_('No video file configured.'), videoPath ?? '');
+        if (!folderPath || folderPath.trim() === '') {
+            this._showError(_('No videos folder configured.'), folderPath ?? '');
             return;
         }
 
-        if (!GLib.file_test(videoPath, GLib.FileTest.EXISTS)) {
-            this._showError(_('Video file not found.'), videoPath);
+        if (!GLib.file_test(folderPath, GLib.FileTest.IS_DIR)) {
+            this._showError(_('Videos folder not found.'), folderPath);
             return;
         }
 
-        this._launchMpv(videoPath);
+        const videoFiles = this._listVideoFiles(folderPath);
+
+        if (videoFiles.length === 0) {
+            this._showError(_('No video files found in folder.'), folderPath);
+            return;
+        }
+
+        this._launchMpv(videoFiles, folderPath);
     }
 
     /**
-     * Launch one mpv instance per monitor in fullscreen loop mode.
+     * Enumerate all video files inside folderPath and return their absolute
+     * paths sorted alphabetically. Supported extensions: mp4, mkv, webm, avi,
+     * mov, m4v.
+     */
+    _listVideoFiles(folderPath) {
+        const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v'];
+        const dir = Gio.File.new_for_path(folderPath);
+        const files = [];
+
+        try {
+            const enumerator = dir.enumerate_children(
+                'standard::name,standard::type',
+                Gio.FileQueryInfoFlags.NONE,
+                null
+            );
+
+            let fileInfo;
+            while ((fileInfo = enumerator.next_file(null)) !== null) {
+                if (fileInfo.get_file_type() !== Gio.FileType.REGULAR)
+                    continue;
+                const name = fileInfo.get_name();
+                const lower = name.toLowerCase();
+                if (VIDEO_EXTENSIONS.some(ext => lower.endsWith(ext)))
+                    files.push(GLib.build_filenamev([folderPath, name]));
+            }
+            enumerator.close(null);
+        } catch (e) {
+            console.error('[MovieScreensaver] Error listing videos folder:', e.message);
+        }
+
+        files.sort();
+        return files;
+    }
+
+    /**
+     * Launch one mpv instance per monitor in fullscreen playlist mode.
      *
      * We do NOT create GNOME Shell overlay actors here; mpv renders its own
      * window which the Wayland/X11 compositor places below the Shell UI layer.
@@ -464,9 +509,13 @@ export default class MovieScreensaverExtension extends Extension {
      * Multi-monitor: one mpv process is spawned per display using --screen=N.
      * On Wayland this may fall back to the primary display depending on the
      * compositor; on X11 it works reliably.
+     *
+     * @param {string[]} videoPaths - Ordered list of absolute video file paths.
+     * @param {string}   folderPath - Source folder (used in error messages).
      */
-    _launchMpv(videoPath) {
+    _launchMpv(videoPaths, folderPath) {
         const mute = this._settings.get_boolean('mute-video');
+        const shuffle = this._settings.get_boolean('shuffle-videos');
         const monitorCount = Main.layoutManager.monitors.length;
         this._playerProcs = [];
 
@@ -476,7 +525,8 @@ export default class MovieScreensaverExtension extends Extension {
                 '--fs',
                 `--screen=${screenIdx}`,
                 `--fs-screen=${screenIdx}`,
-                '--loop=inf',
+                // Loop the entire playlist indefinitely
+                '--loop-playlist=inf',
                 '--no-terminal',
                 '--really-quiet',
                 '--no-border',
@@ -490,7 +540,11 @@ export default class MovieScreensaverExtension extends Extension {
                 mute ? '--mute=yes' : '--mute=no',
                 // Silence audio on duplicate screens (only first plays audio)
                 ...(screenIdx > 0 ? ['--mute=yes'] : []),
-                videoPath,
+                // Randomise playback order when the user enabled shuffle
+                ...(shuffle ? ['--shuffle'] : []),
+                // Separator before positional file arguments
+                '--',
+                ...videoPaths,
             ];
 
             try {
@@ -525,7 +579,7 @@ export default class MovieScreensaverExtension extends Extension {
                         (this._playerProcs ?? []).length === 0) {
                         this._showError(
                             _('Player process exited unexpectedly.'),
-                            videoPath
+                            folderPath
                         );
                     }
                 });
@@ -533,7 +587,7 @@ export default class MovieScreensaverExtension extends Extension {
                 this._clearMarkerFile();
                 this._showError(
                     _('Failed to launch mpv: %s').format(e.message),
-                    videoPath
+                    folderPath
                 );
                 return;
             }
