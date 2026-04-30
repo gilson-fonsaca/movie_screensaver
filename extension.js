@@ -24,6 +24,8 @@ import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/ex
 
 const SCHEMA_ID = 'org.gnome.shell.extensions.movie-screensaver';
 
+const DEBUG = false;
+
 // D-Bus interface for logind (suspend detection)
 const LOGIN_DBUS_NAME = 'org.freedesktop.login1';
 const LOGIN_DBUS_PATH = '/org/freedesktop/login1';
@@ -282,7 +284,7 @@ export default class MovieScreensaverExtension extends Extension {
                 this._settings.disconnect(this._settingsChangedId);
             }
         } catch (e) {
-            console.warn('[MovieScreensaver] disable: settings disconnect error:', e.message);
+            if (DEBUG) console.warn('[MovieScreensaver] disable: settings disconnect error:', e.message);
         }
         this._settingsChangedId = null;
 
@@ -290,14 +292,14 @@ export default class MovieScreensaverExtension extends Extension {
         try {
             this._removeIdleWatch();
         } catch (e) {
-            console.warn('[MovieScreensaver] disable: idle watch removal error:', e.message);
+            if (DEBUG) console.warn('[MovieScreensaver] disable: idle watch removal error:', e.message);
         }
 
         // ── Logind proxy ─────────────────────────────────────────────────────
         try {
             this._disconnectLogind();
         } catch (e) {
-            console.warn('[MovieScreensaver] disable: logind disconnect error:', e.message);
+            if (DEBUG) console.warn('[MovieScreensaver] disable: logind disconnect error:', e.message);
         }
 
         // ── Screensaver / player ─────────────────────────────────────────────
@@ -305,7 +307,7 @@ export default class MovieScreensaverExtension extends Extension {
             if (this._screensaverActive)
                 this._stopScreensaver(false, true);
         } catch (e) {
-            console.warn('[MovieScreensaver] disable: screensaver stop error:', e.message);
+            if (DEBUG) console.warn('[MovieScreensaver] disable: screensaver stop error:', e.message);
         }
 
         this._settings = null;
@@ -383,7 +385,7 @@ export default class MovieScreensaverExtension extends Extension {
                 }
             );
         } catch (e) {
-            console.warn('[MovieScreensaver] Could not connect to logind:', e.message);
+            if (DEBUG) console.warn('[MovieScreensaver] Could not connect to logind:', e.message);
             this._loginProxy = null;
         }
     }
@@ -559,9 +561,15 @@ export default class MovieScreensaverExtension extends Extension {
                 if (screenIdx === 0) {
                     const pid = proc.get_identifier();
                     if (pid) {
-                        GLib.file_set_contents(
-                            this._markerFile,
-                            new TextEncoder().encode(pid)
+                        const markerFile = Gio.File.new_for_path(this._markerFile);
+                        markerFile.replace_contents_async(
+                            new TextEncoder().encode(pid),
+                            null, false,
+                            Gio.FileCreateFlags.REPLACE_DESTINATION,
+                            null,
+                            (_f, res) => {
+                                try { _f.replace_contents_finish(res); } catch (_e) { /* ignore */ }
+                            }
                         );
                     }
                 }
@@ -612,20 +620,23 @@ export default class MovieScreensaverExtension extends Extension {
         if (!GLib.file_test(this._markerFile, GLib.FileTest.EXISTS))
             return;
 
-        try {
-            const [ok, contents] = GLib.file_get_contents(this._markerFile);
-            if (ok) {
-                const pid = parseInt(new TextDecoder().decode(contents).trim(), 10);
-                if (pid > 0) {
-                    try {
-                        // SIGTERM
-                        GLib.spawn_command_line_async(`kill ${pid}`);
-                    } catch (_e) { /* process already gone */ }
+        const file = Gio.File.new_for_path(this._markerFile);
+        file.load_contents_async(null, (_f, res) => {
+            try {
+                const [ok, contents] = _f.load_contents_finish(res);
+                if (ok) {
+                    const pid = parseInt(new TextDecoder().decode(contents).trim(), 10);
+                    if (pid > 0) {
+                        try {
+                            // SIGTERM
+                            GLib.spawn_command_line_async(`kill ${pid}`);
+                        } catch (_e) { /* process already gone */ }
+                    }
                 }
-            }
-        } catch (_e) { /* ignore */ }
+            } catch (_e) { /* ignore */ }
 
-        this._clearMarkerFile();
+            this._clearMarkerFile();
+        });
     }
 
     _clearMarkerFile() {
