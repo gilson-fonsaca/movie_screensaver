@@ -8,6 +8,14 @@ user inactivity.
 
 ---
 
+## Support
+
+If you find Movie Screensaver useful, consider buying me a coffee:
+
+[![Buy me a coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=Gilsonf&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/Gilsonf)
+
+---
+
 ## Description
 
 Movie Screensaver hooks into GNOME's idle monitor and, when the system has been
@@ -307,14 +315,6 @@ The project is hosted on GitHub:
 [https://github.com/gilson-fonsaca/movie_screensaver.git](https://github.com/gilson-fonsaca/movie_screensaver.git)
 
 Bug reports, pull requests and feature suggestions are welcome.
-
----
-
-## Support
-
-If you find Movie Screensaver useful, consider buying me a coffee:
-
-[![Buy me a coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=Gilsonf&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/Gilsonf)
 
 ---
 
